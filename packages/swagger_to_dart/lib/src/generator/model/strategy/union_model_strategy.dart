@@ -113,8 +113,15 @@ class UnionModelStrategy
                     ..name = 'object'
                     ..type = refer(className)),
                 ])
-                ..body = Code(
-                    'return {unionKey: object.toJson(), ...object.toJson()};'),
+                // Emit the flat inner object (the value the union wraps), so the
+                // serialized union matches the backend's discriminated shape
+                // instead of being nested under a `value`/`runtimeType` envelope.
+                ..body = Code('''
+final value = object.toJson()[unionKey];
+if (value == null) return <String, dynamic>{};
+if (value is Map<String, dynamic>) return value;
+return (value as dynamic).toJson() as Map<String, dynamic>;
+'''),
             )
           ]),
       ),

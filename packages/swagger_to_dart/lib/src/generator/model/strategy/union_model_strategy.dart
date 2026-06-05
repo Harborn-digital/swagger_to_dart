@@ -97,8 +97,9 @@ class UnionModelStrategy
                     ..name = 'json'
                     ..type = refer('Map<String, dynamic>')),
                 ])
-                ..body = Code(
-                    'return $className.fromJson({unionKey: json, ...json});'),
+                // The union's own `fromJson` now performs the value-key injection
+                // (see below), so the converter can delegate to it directly.
+                ..body = Code('return $className.fromJson(json);'),
             ),
             Method(
               (b) => b
@@ -190,7 +191,11 @@ class UnionModelStrategy
                         ..type = refer('Map<String, dynamic>')),
                     ])
                     ..lambda = true
-                    ..body = Code('_\$${className}FromJson(json)'),
+                    // Inject the value-key here so the union deserializes correctly
+                    // both as a model field (via the converter) and as a top-level
+                    // response type (where retrofit calls fromJson directly).
+                    ..body = Code(
+                        "_\$${className}FromJson({'$valueKeyName': json, ...json})"),
                 )
               ]),
           )

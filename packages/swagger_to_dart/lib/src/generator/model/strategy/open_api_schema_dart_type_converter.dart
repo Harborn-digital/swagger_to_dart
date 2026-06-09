@@ -197,6 +197,19 @@ class OpenApiSchemaDartTypeConverter extends GeneratorStrategy {
     return 'dynamic';
   }
 
+  /// Returns [items] with [title] applied when [items] is an untitled `oneOf`
+  /// or `anyOf` schema. Used so inline unions nested in an array inherit the
+  /// array's (operation-level) title and therefore get a unique class name.
+  OpenApiSchema? _propagateTitleToUnionItems(OpenApiSchema? items, String? title) {
+    if (items == null || title == null) return items;
+
+    return switch (items) {
+      OpenApiSchemaOneOf schema when schema.title == null => schema.copyWith(title: title),
+      OpenApiSchemaAnyOf schema when schema.title == null => schema.copyWith(title: title),
+      _ => items,
+    };
+  }
+
   String getType(
     OpenApiSchemaType schema, {
     required String className,
@@ -261,7 +274,15 @@ class OpenApiSchemaDartTypeConverter extends GeneratorStrategy {
       case OpenApiSchemaVarType.boolean:
         return 'bool';
       case OpenApiSchemaVarType.array:
-        final items = schema.items;
+        // Propagate the array's title onto an untitled oneOf/anyOf items schema.
+        // Without this an inline union inside an array is named after its
+        // discriminator keys (e.g. basic/video/timed -> BasicOrvideoOrtimedUnion),
+        // which collides across endpoints that share discriminator values (the
+        // /quiz and /questions responses both use basic/video/timed). Giving the
+        // items schema the array's title lets it get a unique, per-operation name
+        // (e.g. "Response Get Quizzes" -> ResponseGetQuizzes), mirroring how a
+        // non-array oneOf response is already named from its own title.
+        final items = _propagateTitleToUnionItems(schema.items, schema.title);
         final dartType = items == null
             ? 'dynamic'
             : get(items, className: className, overrideTypes: overrideTypes);
